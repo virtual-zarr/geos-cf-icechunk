@@ -2,7 +2,22 @@
 
 This pipeline creates and manages Virtualizarr/Icechunk stores for GEOS-CF (Goddard Earth Observing System Composition Forecasting) data on AWS. It is based on the [virtualizarr-data-pipelines](https://github.com/NASA-IMPACT/virtualizarr-data-pipelines) template and provides scalable infrastructure for processing and concatenating GEOS-CF archival files into virtual datasets.
 
-[![Architecture](./docs/architecture.png)](./docs/architecture.png)
+### Data source :satellite:
+GEOS-CF is NASA's global, near-real-time atmospheric composition forecasting system, produced by the [Global Modeling and Assimilation Office (GMAO)](https://gmao.gsfc.nasa.gov/) at NASA Goddard. It couples the GEOS Earth system model with the GEOS-Chem chemistry module to produce hourly, global fields of aerosols, trace gases (O3, NO2, CO, SO2, PM2.5, etc.), and supporting meteorology on a 0.25° × 0.25° grid (1440 × 721).
+
+The pipeline indexes the **GEOS-CF v2 analysis (replay) product**, which is the assimilated, best-estimate reconstruction of the atmospheric state — distinct from the forecast product and from the earlier v1 stream. Files are published as hourly NetCDF4 (`.nc4`) granules through the GMAO THREDDS Data Server at [`https://ds.nccs.nasa.gov/thredds/`](https://ds.nccs.nasa.gov/thredds/) under the `GEOS-CF/analysis-v2/` collection, organized into `Y<year>/M<month>/D<day>/` directories with timestamps embedded in each filename (for example `GEOS.cf.ana.aqc_tavg_1hr_glo_L1440x721_slv.20250804_0930z.nc4`).
+
+For background on the product see the [GEOS-CF project page](https://gmao.gsfc.nasa.gov/gmao-products/geos-cf/) and the [data access portal](https://fluid.nccs.nasa.gov/cf/).
+
+### Documentation :books:
+- [Pipeline design (brief)](./docs/pipeline-design.md)
+
+#### Pipeline design overview
+The pipeline separates discovery from ingestion so each stage stays small and testable:
+- `query_thredds` handles THREDDS catalog traversal and URL matching.
+- `search_latest` uses `query_thredds` to discover candidate files and emit downstream work.
+- `process_file` performs the ingestion step, virtualizing source files into the Icechunk-backed dataset.
+- `initialize` bootstraps repository state, and `garbage_collect` handles periodic repository cleanup.
 
 ### Configuration :wrench:
 The pipeline uses a strongly-typed [settings module](./cdk/settings.py) to configure deployment parameters like bucket names and SNS topics. Settings can be overridden using a `.env` file (see [.env.sample](.env.sample) for an example).

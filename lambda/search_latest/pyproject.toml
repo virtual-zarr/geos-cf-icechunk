@@ -1,0 +1,22 @@
+[project]
+name = "search-latest-lambda"
+version = "0.1.0"
+description = "Lambda function to discover latest GEOS-CF files"
+requires-python = ">=3.12"
+
+dependencies = [
+    "aws-lambda-powertools>=2.30.0",
+    "aws-xray-sdk",
+    "boto3>=1.34.0",
+    "query-thredds",
+    "virtualizarr-processor",
+    "icechunk",
+]
+
+[tool.uv.sources]
+virtualizarr-processor = { path = "../virtualizarr-processor" }
+query-thredds = { path = "../../query-thredds" }
+
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
