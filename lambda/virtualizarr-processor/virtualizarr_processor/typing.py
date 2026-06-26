@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Protocol, runtime_checkable
 
 import icechunk
+import xarray as xr
 from icechunk import Repository
 
 
@@ -38,6 +39,21 @@ class VirtualizarrProcessor(Protocol):
         -------
         str
             A snapshot id of the append commit.
+        """
+        ...
+
+    @classmethod
+    def validate_dataset(cls, dataset: xr.Dataset) -> bool:
+        """
+        Validate a parsed xarray Dataset before writing it to Icechunk.
+
+        Parameters
+        ----------
+            dataset: The parsed xarray Dataset.
+        Returns
+        -------
+        bool
+            True if the dataset passes validation.
         """
         ...
 

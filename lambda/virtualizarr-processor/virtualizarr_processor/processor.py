@@ -1,15 +1,19 @@
 import os
 import warnings
+from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from itertools import islice
 from typing import Any
 
 import icechunk
+import numpy as np
 import pandas as pd
+import pandera as pa
 import xarray as xr
 from icechunk import Repository
 from obstore.store import from_url
+from pandera.xarray import Coordinate, DatasetSchema, DataVar
 from tenacity import (
     retry,
     stop_after_attempt,
@@ -52,6 +56,48 @@ warnings.filterwarnings(
     message="Numcodecs codecs are not in the Zarr version 3 specification*",
     category=UserWarning,
 )
+
+
+# Expected structure of a GEOS-CF virtual dataset, validated before writing to
+# icechunk. Checks are kept at the schema level (no data-value assertions) so
+# that validation never attempts to load virtual chunk data
+EXPECTED_DATASET_DIMS = ("time", "lev", "lat", "lon")
+EXPECTED_DATA_DTYPE = np.float32
+EXPECTED_LEV_SIZE = 1
+EXPECTED_LAT_SIZE = 721
+EXPECTED_LON_SIZE = 1440
+# The full set of data variables a valid GEOS-CF dataset should contain
+EXPECTED_DATA_VARS = ("CO", "NO2", "O3", "PM10_RH35", "PM25_RH35", "SO2")
+
+
+def _build_geos_cf_dataset_schema(data_var_names: list[str]) -> DatasetSchema:
+    """Build the declarative pandera schema for a GEOS-CF virtual dataset."""
+    data_vars = {
+        name: DataVar(
+            dtype=EXPECTED_DATA_DTYPE,
+            dims=EXPECTED_DATASET_DIMS,
+            sizes={
+                "time": None,
+                "lev": EXPECTED_LEV_SIZE,
+                "lat": EXPECTED_LAT_SIZE,
+                "lon": EXPECTED_LON_SIZE,
+            },
+            array_type=ManifestArray,
+        )
+        for name in data_var_names
+    }
+    coords = {
+        "time": Coordinate(dtype="datetime64[ns]", dims=("time",)),
+        "lev": Coordinate(dtype=np.float64, dims=("lev",)),
+        "lat": Coordinate(dtype=np.float64, dims=("lat",)),
+        "lon": Coordinate(dtype=np.float64, dims=("lon",)),
+    }
+    return DatasetSchema(
+        data_vars=data_vars,
+        coords=coords,
+        strict=True,
+        strict_coords=True,
+    )
 
 
 def _build_vds_for_keys(keys: list[str]) -> xr.Dataset:
@@ -257,10 +303,39 @@ class Processor:
             )
         )
 
+    @classmethod
+    def validate_dataset(
+        cls,
+        dataset: xr.Dataset,
+        data_vars: Iterable[str],
+    ) -> bool:
+        """Validate a virtual dataset against the GEOS-CF schema.
+
+        Validation is schema-level only, so it never loads virtual chunk data.
+
+        Args:
+            dataset (xr.Dataset): dataset to validate
+            data_vars (Iterable[str]): data variables to validate
+
+        Returns:
+            bool: True if the dataset conforms to the schema, False otherwise
+        """
+
+
+        schema = _build_geos_cf_dataset_schema(data_vars)
+        try:
+            schema.validate(dataset, lazy=True)
+        except (pa.errors.SchemaError, pa.errors.SchemaErrors):
+            return False
+        return True
+
     def process_file(self, file_keys: list[str], overwrite: bool = False) -> str:
         repo = self.initialize_store()
         vds = build_vds(file_keys)
         vds.attrs.clear()
+
+        if not self.validate_dataset(vds, EXPECTED_DATA_VARS):
+            raise ValueError("Dataset validation failed for processed dataset")
 
         keys_str = ", ".join([key.split("/")[-1] for key in file_keys])
 
