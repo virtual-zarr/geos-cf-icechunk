@@ -5,6 +5,7 @@ description = "Module for ingesting geos-cf data to Icechunk"
 requires-python = ">=3.11"
 dependencies = [
     "icechunk",
+    "pandera[xarray]>=0.25.0",
     "virtualizarr",
     "aiohttp",
     "h5py",

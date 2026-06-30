@@ -23,6 +23,7 @@ dev = [
   "mypy",
   "pre-commit",
   "nodeenv",
+  "pandera[xarray]>=0.25.0",
   "pydantic-settings>=2.8.1",
   "pytest",
   "query_thredds",
